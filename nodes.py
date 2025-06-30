@@ -545,10 +545,10 @@ class WriteChapters(BatchNode):
         project_name = shared["project_name"]
         language = shared.get("language", "english")
         use_cache = shared.get("use_cache", True)  # Get use_cache flag, default to True
+        role = shared.get("role", "manager")  # Get the role
 
         # Get already written chapters to provide context
         # We store them temporarily during the batch run, not in shared memory yet
-        # The 'previous_chapters_summary' will be built progressively in the exec context
         self.chapters_written_so_far = (
             []
         )  # Use instance variable for temporary storage across exec calls
@@ -616,7 +616,8 @@ class WriteChapters(BatchNode):
                         "prev_chapter": prev_chapter,  # Add previous chapter info (uses potentially translated name)
                         "next_chapter": next_chapter,  # Add next chapter info (uses potentially translated name)
                         "language": language,  # Add language for multi-language support
-                        "use_cache": use_cache, # Pass use_cache flag
+                        "use_cache": use_cache,  # Pass use_cache flag
+                        "role": role,  # Pass the role to each item
                         # previous_chapters_summary will be added dynamically in exec
                     }
                 )
@@ -639,8 +640,9 @@ class WriteChapters(BatchNode):
         chapter_num = item["chapter_num"]
         project_name = item.get("project_name")
         language = item.get("language", "english")
-        use_cache = item.get("use_cache", True) # Read use_cache from item
-        print(f"Writing chapter {chapter_num} for: {abstraction_name} using LLM...")
+        use_cache = item.get("use_cache", True)  # Read use_cache from item
+        role = item.get("role", "manager")  # Get the role for this chapter
+        print(f"Writing chapter {chapter_num} for: {abstraction_name} (Role: {role}) using LLM...")
 
         # Prepare file context string from the map
         file_context_str = "\n\n".join(
@@ -676,7 +678,7 @@ class WriteChapters(BatchNode):
             )
             tone_note = f" (appropriate for {lang_cap} readers)"
 
-        prompt = f"""
+        manager_prompt = f"""
 {language_instruction}Write a very beginner-friendly tutorial chapter (in Markdown format) for the project `{project_name}` about the concept: "{abstraction_name}". This is Chapter {chapter_num}.
 
 Concept Details{concept_details_note}:
@@ -724,7 +726,53 @@ Instructions for the chapter (Generate content in {language.capitalize()} unless
 
 Now, directly provide a super beginner-friendly Markdown output (DON'T need ```markdown``` tags):
 """
-        chapter_content = call_llm(prompt, use_cache=(use_cache and self.cur_retry == 0)) # Use cache only if enabled and not retrying
+
+        developer_prompt = f"""
+{language_instruction}Write a detailed technical chapter (in Markdown format) for an experienced software engineer about the component: "{abstraction_name}" in the project `{project_name}`. This is Chapter {chapter_num}.
+
+Component Details{concept_details_note}:
+- Name: {abstraction_name}
+- Description:
+{abstraction_description}
+
+Complete System Documentation Structure{structure_note}:
+{item["full_chapter_listing"]}
+
+Context from previous chapters{prev_summary_note}:
+{previous_chapters_summary if previous_chapters_summary else "This is the first chapter."}
+
+Relevant Source Code (Code itself remains unchanged):
+{file_context_str if file_context_str else "No specific code snippets provided for this component."}
+
+Instructions for this chapter (Generate content in {language.capitalize()} unless specified otherwise):
+- Start with a clear heading (e.g., `# Chapter {chapter_num}: {abstraction_name}`).
+
+- If not the first chapter, provide a brief technical transition from the previous component{instruction_lang_note}, linking to it with a Markdown link{link_lang_note}.
+
+- Start by explaining the architectural role of this component{instruction_lang_note}. Discuss its design rationale, trade-offs, and how it fits into the overall system architecture.
+
+- Detail the component's core responsibilities and functionalities.
+
+- Provide relevant code snippets that illustrate the core logic, even if they are complex. Explain the purpose of key functions, classes, and their interactions. Do not oversimplify the code, but use comments{code_comment_note} to omit irrelevant boilerplate.
+
+- Explain the data flow, key algorithms, and interactions with other components. Use sequence diagrams (`mermaid`) to illustrate complex interactions between services, classes, or modules. If participant name has space, use: `participant QP as Query Processing`. {mermaid_lang_note}.
+
+- Use mermaid diagrams to illustrate other complex concepts where appropriate (```mermaid``` format). {mermaid_lang_note}.
+
+- When referring to other core components covered in other chapters, use Markdown links: [Chapter Title](filename.md). Use the documentation structure above to find the correct filename and title{link_lang_note}.
+
+- Conclude with a summary of the component's key technical details{instruction_lang_note} and a transition to the next chapter, including a Markdown link if applicable{link_lang_note}.
+
+- The tone should be technical, precise, and professional, suitable for software engineers. Avoid high-level analogies.
+
+- Output *only* the Markdown content for this chapter.
+
+Now, provide the detailed technical Markdown output (DON'T need ```markdown``` tags):
+"""
+
+        prompt = developer_prompt if role == 'developer' else manager_prompt
+
+        chapter_content = call_llm(prompt, use_cache=(use_cache and self.cur_retry == 0))  # Use cache only if enabled and not retrying
         # Basic validation/cleanup
         actual_heading = f"# Chapter {chapter_num}: {abstraction_name}"  # Use potentially translated name
         if not chapter_content.strip().startswith(f"# Chapter {chapter_num}"):

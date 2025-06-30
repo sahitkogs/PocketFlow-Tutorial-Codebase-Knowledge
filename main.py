@@ -52,6 +52,8 @@ def main():
     parser.add_argument("-s", "--max-size", type=int, default=100000, help="Maximum file size in bytes (default: 100000, about 100KB).")
     # Add language parameter for multi-language support
     parser.add_argument("--language", default="english", help="Language for the generated tutorial (default: english)")
+    # Add role parameter for audience-specific content
+    parser.add_argument("--role", choices=['manager', 'developer'], default='manager', help="The target audience for the tutorial (default: manager)")
     # Add use_cache parameter to control LLM caching
     parser.add_argument("--no-cache", action="store_true", help="Disable LLM response caching (default: caching enabled)")
     # Add max_abstraction_num parameter to control the number of abstractions
@@ -82,6 +84,9 @@ def main():
         # Add language for multi-language support
         "language": args.language,
         
+        # Add role for audience-specific content
+        "role": args.role,
+        
         # Add use_cache flag (inverse of no-cache flag)
         "use_cache": not args.no_cache,
         
@@ -98,7 +103,7 @@ def main():
     }
 
     # Display starting message with repository/directory and language
-    print(f"Starting tutorial generation for: {args.repo or args.dir} in {args.language.capitalize()} language")
+    print(f"Starting tutorial generation for: {args.repo or args.dir} in {args.language.capitalize()} language for role: {args.role.capitalize()}")
     print(f"LLM caching: {'Disabled' if args.no_cache else 'Enabled'}")
 
     # Create the flow instance
