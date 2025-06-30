@@ -1,5 +1,6 @@
 from google import genai
-import os
+from langchain_ollama import ChatOllama
+import os, re, socket
 import logging
 import json
 from datetime import datetime
@@ -25,6 +26,30 @@ logger.addHandler(file_handler)
 cache_file = "llm_cache.json"
 
 
+def set_proxy():
+    if socket.gethostname()!="U705N000EE":
+        # Set proxy environment variables
+        os.environ["https_proxy"] = "http://10.212.10.210:8080"
+        os.environ["http_proxy"] = "http://10.212.10.210:8080"
+        os.environ["ftp_proxy"] = "http://10.212.10.210:8080"
+
+        # Set uppercase versions as well (optional, depending on the application)
+        os.environ["HTTPS_PROXY"] = os.environ["https_proxy"]
+        os.environ["HTTP_PROXY"] = os.environ["http_proxy"]
+        os.environ["FTP_PROXY"] = os.environ["ftp_proxy"]
+
+def unset_proxy():
+    if socket.gethostname()!="U705N000EE":
+        # Unset (remove) the proxy environment variables
+        os.environ.pop("https_proxy", None)  # Remove 'https_proxy' if it exists
+        os.environ.pop("http_proxy", None)  # Remove 'http_proxy' if it exists
+        os.environ.pop("ftp_proxy", None)  # Remove 'ftp_proxy' if it exists
+
+        # Unset uppercase versions as well (optional, depending on the application)
+        os.environ.pop("HTTPS_PROXY", None)  # Remove 'HTTPS_PROXY' if it exists
+        os.environ.pop("HTTP_PROXY", None)  # Remove 'HTTP_PROXY' if it exists
+        os.environ.pop("FTP_PROXY", None)  # Remove 'FTP_PROXY' if it exists
+
 # By default, we Google Gemini 2.5 pro, as it shows great performance for code understanding
 def call_llm(prompt: str, use_cache: bool = True) -> str:
     # Log the prompt
@@ -45,24 +70,41 @@ def call_llm(prompt: str, use_cache: bool = True) -> str:
         if prompt in cache:
             logger.info(f"RESPONSE: {cache[prompt]}")
             return cache[prompt]
-
+    
     # # Call the LLM if not in cache or cache disabled
     # client = genai.Client(
-    #     vertexai=True,
+    #     vertexai=True, 
     #     # TODO: change to your own project id and location
     #     project=os.getenv("GEMINI_PROJECT_ID", "your-project-id"),
     #     location=os.getenv("GEMINI_LOCATION", "us-central1")
     # )
+    # # You can comment the previous line and use the AI Studio key instead:
+    # client = genai.Client(
+    #     api_key=os.getenv("GEMINI_API_KEY", "AIzaSyDCCkkznlviPiCw4oMxVYyRDI4GwVWmsWI"),
+    # )
+    # model = os.getenv("GEMINI_MODEL", "gemini-2.5-pro-preview-03-25")
+    # response = client.models.generate_content(
+    #     model=model,
+    #     contents=[prompt]
+    # )
+    # response_text = response.text
 
-    # You can comment the previous line and use the AI Studio key instead:
-    client = genai.Client(
-        api_key=os.getenv("GEMINI_API_KEY", ""),
-    )
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-pro-exp-03-25")
-    # model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-preview-04-17")
-    
-    response = client.models.generate_content(model=model, contents=[prompt])
-    response_text = response.text
+    unset_proxy()
+    if socket.gethostname()=="zdeoko04sapp10r":
+        base_url = "http://host.docker.internal:11434"
+    elif socket.gethostname()=="HP-HN1":
+        base_url = "http://localhost:11434"
+    else:
+        base_url = "http://zdeoko04sapp10r.zeiss.org:11434/"
+    llm = ChatOllama(model="llama4:scout",
+                        base_url=base_url)
+    # , config={"callbacks": [opik_tracer]}
+    response = llm.invoke(prompt)
+    set_proxy()
+    # response_text = response.content
+    response_text = re.sub(r"<think>.*?</think>\n?", "", response.content, flags=re.DOTALL)
+    if "</think>" in response_text:
+        response_text = response_text.split("</think>")[1]
 
     # Log the response
     logger.info(f"RESPONSE: {response_text}")

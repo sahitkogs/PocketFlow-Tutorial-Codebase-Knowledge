@@ -10,7 +10,7 @@ dotenv.load_dotenv()
 DEFAULT_INCLUDE_PATTERNS = {
     "*.py", "*.js", "*.jsx", "*.ts", "*.tsx", "*.go", "*.java", "*.pyi", "*.pyx",
     "*.c", "*.cc", "*.cpp", "*.h", "*.md", "*.rst", "*Dockerfile",
-    "*Makefile", "*.yaml", "*.yml",
+    "*Makefile", "*.yaml", "*.yml", "*.cs", "*.txt", "*.m"
 }
 
 DEFAULT_EXCLUDE_PATTERNS = {
@@ -21,7 +21,7 @@ DEFAULT_EXCLUDE_PATTERNS = {
     "*test*",
     "*tests/*",
     "*examples/*",
-    "v1/*",
+    "v1/*", "repos/*", "qdrant_storage/*", "embeddings/*", "volumes/*", "archives/*", 
     "*dist/*",
     "*build/*",
     "*experimental/*",
