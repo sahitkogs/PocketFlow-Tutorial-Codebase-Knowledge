@@ -87,7 +87,10 @@ class IdentifyAbstractions(Node):
         project_name = shared["project_name"]  # Get project name
         language = shared.get("language", "english")  # Get language
         use_cache = shared.get("use_cache", True)  # Get use_cache flag, default to True
-        max_abstraction_num = shared.get("max_abstraction_num", 10)  # Get max_abstraction_num, default to 10
+        max_abstraction_num = shared.get(
+            "max_abstraction_num", 10
+        )  # Get max_abstraction_num, default to 10
+        role = shared.get("role", "manager")  # Get the role
 
         # Helper to create context from files, respecting limits (basic example)
         def create_llm_context(files_data):
@@ -113,6 +116,7 @@ class IdentifyAbstractions(Node):
             language,
             use_cache,
             max_abstraction_num,
+            role,  # Pass role
         )  # Return all parameters
 
     def exec(self, prep_res):
@@ -124,8 +128,9 @@ class IdentifyAbstractions(Node):
             language,
             use_cache,
             max_abstraction_num,
+            role,  # Get role
         ) = prep_res  # Unpack all parameters
-        print(f"Identifying abstractions using LLM...")
+        print(f"Identifying abstractions using LLM (Role: {role})...")
 
         # Add language instruction and hints only if not English
         language_instruction = ""
@@ -137,7 +142,7 @@ class IdentifyAbstractions(Node):
             name_lang_hint = f" (value in {language.capitalize()})"
             desc_lang_hint = f" (value in {language.capitalize()})"
 
-        prompt = f"""
+        manager_prompt = f"""
 For the project `{project_name}`:
 
 Codebase Context:
@@ -173,7 +178,47 @@ Format the output as a YAML list of dictionaries:
     - 5 # path/to/another.js
 # ... up to {max_abstraction_num} abstractions
 ```"""
-        response = call_llm(prompt, use_cache=(use_cache and self.cur_retry == 0))  # Use cache only if enabled and not retrying
+
+        developer_prompt = f"""
+For the project `{project_name}`:
+
+Codebase Context:
+{context}
+
+{language_instruction}Analyze the codebase context.
+Identify the top 5-{max_abstraction_num} core technical components, such as key classes, modules, services, or data structures, to help a new developer understand the codebase.
+
+For each component, provide:
+1. A concise `name`{name_lang_hint} (e.g., `QueryProcessingService`, `DataConnectionManager`).
+2. A technical `description` explaining its primary responsibility in the architecture, its key methods or functions, and how it is used by other components{desc_lang_hint}.
+3. A list of relevant `file_indices` (integers) using the format `idx # path/comment`.
+
+List of file indices and paths present in the context:
+{file_listing_for_prompt}
+
+Format the output as a YAML list of dictionaries:
+
+```yaml
+- name: |
+    QueryProcessingService{name_lang_hint}
+  description: |
+    Handles incoming API requests, validates query parameters, and delegates to the appropriate data fetching service.{desc_lang_hint}
+  file_indices:
+    - 0 # path/to/service.py
+    - 3 # path/to/related_handler.py
+- name: |
+    DataConnectionManager{name_lang_hint}
+  description: |
+    Manages the connection pool to the database, handles query execution and transaction management.{desc_lang_hint}
+  file_indices:
+    - 5 # path/to/db_manager.js
+# ... up to {max_abstraction_num} components
+```"""
+
+        prompt = developer_prompt if role == "developer" else manager_prompt
+        response = call_llm(
+            prompt, use_cache=(use_cache and self.cur_retry == 0)
+        )  # Use cache only if enabled and not retrying
 
         # --- Validation ---
         yaml_str = response.strip().split("```yaml")[1].split("```")[0].strip()
@@ -246,6 +291,7 @@ class AnalyzeRelationships(Node):
         project_name = shared["project_name"]  # Get project name
         language = shared.get("language", "english")  # Get language
         use_cache = shared.get("use_cache", True)  # Get use_cache flag, default to True
+        role = shared.get("role", "manager")  # Get role
 
         # Get the actual number of abstractions directly
         num_abstractions = len(abstractions)
@@ -280,22 +326,24 @@ class AnalyzeRelationships(Node):
         return (
             context,
             "\n".join(abstraction_info_for_prompt),
-            num_abstractions, # Pass the actual count
+            num_abstractions,  # Pass the actual count
             project_name,
             language,
             use_cache,
+            role,  # Pass role
         )  # Return use_cache
 
     def exec(self, prep_res):
         (
             context,
             abstraction_listing,
-            num_abstractions, # Receive the actual count
+            num_abstractions,  # Receive the actual count
             project_name,
             language,
             use_cache,
-         ) = prep_res  # Unpack use_cache
-        print(f"Analyzing relationships using LLM...")
+            role,  # Get role
+        ) = prep_res  # Unpack use_cache
+        print(f"Analyzing relationships using LLM (Role: {role})...")
 
         # Add language instruction and hints only if not English
         language_instruction = ""
@@ -306,7 +354,7 @@ class AnalyzeRelationships(Node):
             lang_hint = f" (in {language.capitalize()})"
             list_lang_note = f" (Names might be in {language.capitalize()})"  # Note for the input list
 
-        prompt = f"""
+        manager_prompt = f"""
 Based on the following abstractions and relevant code snippets from the project `{project_name}`:
 
 List of Abstraction Indices and Names{list_lang_note}:
@@ -344,7 +392,47 @@ relationships:
 
 Now, provide the YAML output:
 """
-        response = call_llm(prompt, use_cache=(use_cache and self.cur_retry == 0)) # Use cache only if enabled and not retrying
+
+        developer_prompt = f"""
+Based on the following components and relevant code snippets from the project `{project_name}`:
+
+List of Component Indices and Names{list_lang_note}:
+{abstraction_listing}
+
+Context (Components, Descriptions, Code):
+{context}
+
+{language_instruction}Please provide:
+1. A technical `summary` of the project's architecture{lang_hint}. Mention the key technologies used, the main design pattern (e.g., MVC, Microservices, Event-Driven), and the overall data flow.
+2. A list (`relationships`) describing the key technical interactions between these components. For each relationship, specify:
+    - `from_abstraction`: Index of the source component (e.g., `0 # ComponentName1`)
+    - `to_abstraction`: Index of the target component (e.g., `1 # ComponentName2`)
+    - `label`: A precise, technical label for the interaction{lang_hint} (e.g., "Inherits from", "Instantiates", "Calls method", "Notifies via event", "Reads data from").
+
+IMPORTANT: Make sure EVERY component is involved in at least ONE relationship (either as source or target). Each component index must appear at least once across all relationships.
+
+Format the output as YAML:
+
+```yaml
+summary: |
+  A technical summary of the project architecture, including design patterns and data flow{lang_hint}.
+relationships:
+  - from_abstraction: 0 # ComponentName1
+    to_abstraction: 1 # ComponentName2
+    label: "Instantiates"{lang_hint}
+  - from_abstraction: 2 # ComponentName3
+    to_abstraction: 0 # ComponentName1
+    label: "Calls method"{lang_hint}
+  # ... other relationships
+```
+
+Now, provide the YAML output:
+"""
+
+        prompt = developer_prompt if role == "developer" else manager_prompt
+        response = call_llm(
+            prompt, use_cache=(use_cache and self.cur_retry == 0)
+        )  # Use cache only if enabled and not retrying
 
         # --- Validation ---
         yaml_str = response.strip().split("```yaml")[1].split("```")[0].strip()
@@ -770,7 +858,7 @@ Instructions for this chapter (Generate content in {language.capitalize()} unles
 Now, provide the detailed technical Markdown output (DON'T need ```markdown``` tags):
 """
 
-        prompt = developer_prompt if role == 'developer' else manager_prompt
+        prompt = developer_prompt if role == "developer" else manager_prompt
 
         chapter_content = call_llm(prompt, use_cache=(use_cache and self.cur_retry == 0))  # Use cache only if enabled and not retrying
         # Basic validation/cleanup
