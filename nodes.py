@@ -45,7 +45,7 @@ class FetchRepo(Node):
             "include_patterns": include_patterns,
             "exclude_patterns": exclude_patterns,
             "max_file_size": max_file_size,
-            "use_relative_paths": True,
+            "use_relative_paths": False,
         }
 
     def exec(self, prep_res):
@@ -667,6 +667,15 @@ class WriteChapters(BatchNode):
         # Create a formatted string with all chapters
         full_chapter_listing = "\n".join(all_chapters)
 
+        # Create a mapping of component names to their primary source file for inline linking
+        component_file_mapping_for_prompt = "\n".join(
+            [
+                f'- `{abstr["name"]}`: `{files_data[abstr["files"][0]][0]}`'
+                for abstr in abstractions
+                if abstr.get("files")
+            ]
+        )
+
         items_to_process = []
         for i, abstraction_index in enumerate(chapter_order):
             if 0 <= abstraction_index < len(abstractions):
@@ -679,6 +688,10 @@ class WriteChapters(BatchNode):
                 related_files_content_map = get_content_for_indices(
                     files_data, related_file_indices
                 )
+                # Also get a simple list of file paths for the footer
+                related_file_paths = [
+                    files_data[i][0] for i in related_file_indices
+                ]
 
                 # Get previous chapter info for transitions (uses potentially translated name)
                 prev_chapter = None
@@ -706,6 +719,8 @@ class WriteChapters(BatchNode):
                         "language": language,  # Add language for multi-language support
                         "use_cache": use_cache,  # Pass use_cache flag
                         "role": role,  # Pass the role to each item
+                        "component_file_mapping": component_file_mapping_for_prompt,  # Pass the mapping
+                        "related_file_paths": related_file_paths,  # Pass the simple list of paths
                         # previous_chapters_summary will be added dynamically in exec
                     }
                 )
@@ -730,6 +745,13 @@ class WriteChapters(BatchNode):
         language = item.get("language", "english")
         use_cache = item.get("use_cache", True)  # Read use_cache from item
         role = item.get("role", "manager")  # Get the role for this chapter
+        component_file_mapping = item.get("component_file_mapping", "")
+        related_file_paths = item.get("related_file_paths", [])
+
+        # Format the related file paths into a Markdown list for the prompt
+        referenced_files_markdown = "\n".join(
+            [f"- [`{path}`]({path})" for path in related_file_paths]
+        )
         print(f"Writing chapter {chapter_num} for: {abstraction_name} (Role: {role}) using LLM...")
 
         # Prepare file context string from the map
@@ -823,6 +845,9 @@ Component Details{concept_details_note}:
 - Description:
 {abstraction_description}
 
+Component-to-File-Path Mappings:
+{component_file_mapping}
+
 Complete System Documentation Structure{structure_note}:
 {item["full_chapter_listing"]}
 
@@ -839,6 +864,8 @@ Instructions for this chapter (Generate content in {language.capitalize()} unles
 
 - Start by explaining the architectural role of this component{instruction_lang_note}. Discuss its design rationale, trade-offs, and how it fits into the overall system architecture.
 
+- When you mention a component by name (e.g., "{abstraction_name}"), format it as an inline Markdown link pointing to its primary source file. Use the `Component-to-File-Path Mappings` list for reference. Example: `The [`QueryProcessingService`](path/to/service.py) is called...`.
+
 - Detail the component's core responsibilities and functionalities.
 
 - Provide relevant code snippets that illustrate the core logic, even if they are complex. Explain the purpose of key functions, classes, and their interactions. Do not oversimplify the code, but use comments{code_comment_note} to omit irrelevant boilerplate.
@@ -847,9 +874,12 @@ Instructions for this chapter (Generate content in {language.capitalize()} unles
 
 - Use mermaid diagrams to illustrate other complex concepts where appropriate (```mermaid``` format). {mermaid_lang_note}.
 
-- When referring to other core components covered in other chapters, use Markdown links: [Chapter Title](filename.md). Use the documentation structure above to find the correct filename and title{link_lang_note}.
+- For navigating to other chapters at the start and end of the document, continue to use links to the chapter markdown files (e.g., `[Next Chapter: ...](02_....md)`).
 
 - Conclude with a summary of the component's key technical details{instruction_lang_note} and a transition to the next chapter, including a Markdown link if applicable{link_lang_note}.
+
+- After the conclusion, create a new section titled `### Referenced Source Files` and include the following list of files that were used to generate this chapter's content.
+{referenced_files_markdown}
 
 - The tone should be technical, precise, and professional, suitable for software engineers. Avoid high-level analogies.
 

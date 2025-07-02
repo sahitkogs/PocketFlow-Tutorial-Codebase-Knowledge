@@ -96,7 +96,7 @@ def call_llm(prompt: str, use_cache: bool = True) -> str:
         base_url = "http://localhost:11434"
     else:
         base_url = "http://zdeoko04sapp10r.zeiss.org:11434/"
-    llm = ChatOllama(model="llama4:scout",
+    llm = ChatOllama(model="sammcj/qwen2.5-coder-32b-128k:q6_k",
                         base_url=base_url)
     # , config={"callbacks": [opik_tracer]}
     response = llm.invoke(prompt)
