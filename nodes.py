@@ -920,8 +920,17 @@ Now, provide the detailed technical Markdown output (DON'T need ```markdown``` t
 class CombineTutorial(Node):
     def prep(self, shared):
         project_name = shared["project_name"]
-        output_base_dir = shared.get("output_dir", "output")  # Default output dir
-        output_path = os.path.join(output_base_dir, project_name)
+        
+        # Check if a specific output directory was provided via arguments.
+        output_dir_from_args = shared.get("output_dir")
+
+        if output_dir_from_args:
+            # If provided, use it directly as the final output path.
+            output_path = output_dir_from_args
+        else:
+            # If not provided, construct the default path inside the 'output' folder.
+            output_path = os.path.join("output", project_name)
+            
         repo_url = shared.get("repo_url")  # Get the repository URL
         # language = shared.get("language", "english") # No longer needed for fixed strings
 

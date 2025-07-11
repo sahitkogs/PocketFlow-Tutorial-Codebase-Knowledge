@@ -46,7 +46,7 @@ def main():
 
     parser.add_argument("-n", "--name", help="Project name (optional, derived from repo/directory if omitted).")
     parser.add_argument("-t", "--token", help="GitHub personal access token (optional, reads from GITHUB_TOKEN env var if not provided).")
-    parser.add_argument("-o", "--output", default="output", help="Base directory for output (default: ./output).")
+    parser.add_argument("-o", "--output-dir", help="The exact directory to save the tutorial files. If not provided, defaults to 'output/<project_name>'.")
     parser.add_argument("-i", "--include", nargs="+", help="Include file patterns (e.g. '*.py' '*.js'). Defaults to common code files if not specified.")
     parser.add_argument("-e", "--exclude", nargs="+", help="Exclude file patterns (e.g. 'tests/*' 'docs/*'). Defaults to test/build directories if not specified.")
     parser.add_argument("-s", "--max-size", type=int, default=100000, help="Maximum file size in bytes (default: 100000, about 100KB).")
@@ -74,7 +74,7 @@ def main():
         "local_dir": args.dir,
         "project_name": args.name, # Can be None, FetchRepo will derive it
         "github_token": github_token,
-        "output_dir": args.output, # Base directory for CombineTutorial output
+        "output_dir": args.output_dir, # Base directory for CombineTutorial output
 
         # Add include/exclude patterns and max file size
         "include_patterns": set(args.include) if args.include else DEFAULT_INCLUDE_PATTERNS,
