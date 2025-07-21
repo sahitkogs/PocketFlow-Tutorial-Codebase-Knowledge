@@ -45,7 +45,7 @@ class FetchRepo(Node):
             "include_patterns": include_patterns,
             "exclude_patterns": exclude_patterns,
             "max_file_size": max_file_size,
-            "use_relative_paths": False,
+            "use_relative_paths": True,
         }
 
     def exec(self, prep_res):
